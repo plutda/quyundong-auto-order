@@ -21,8 +21,12 @@
     "postinstall": ""
   },
   "dependencies": {
-    "vue": "^2.5.16",
     "axios": "^0.18.0",
+    "cron": "^1.8.2",
+    "dayjs": "^1.8.29",
+    "element-ui": "^2.13.2",
+    "puppeteer": "3.0.0",
+    "vue": "^2.5.16",
     "vue-electron": "^1.0.6",
     "vue-router": "^3.0.1",
     "vuex": "^3.0.1",

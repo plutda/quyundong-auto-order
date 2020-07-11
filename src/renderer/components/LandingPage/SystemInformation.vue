@@ -1,73 +1,278 @@
 <template>
-  <div>
-    <div class="title">Information</div>
-    <div class="items">
-      <div class="item">
-        <div class="name">Path:</div>
-        <div class="value">{{ path }}</div>
-      </div>
-      <div class="item">
-        <div class="name">Route Name:</div>
-        <div class="value">{{ name }}</div>
-      </div>
-      <div class="item">
-        <div class="name">Vue.js:</div>
-        <div class="value">{{ vue }}</div>
-      </div>
-      <div class="item">
-        <div class="name">Electron:</div>
-        <div class="value">{{ electron }}</div>
-      </div>
-      <div class="item">
-        <div class="name">Node:</div>
-        <div class="value">{{ node }}</div>
-      </div>
-      <div class="item">
-        <div class="name">Platform:</div>
-        <div class="value">{{ platform }}</div>
-      </div>
+    <div>
+        <el-container>
+            <el-aside>
+                <!-- <el-form label-width="80px" :model="formObj"> -->
+                    <!-- <el-form-item label="用户名">
+                        <el-input v-model="formObj.name"></el-input>
+                    </el-form-item>
+                    <el-form-item label="密码">
+                        <el-input v-model="formObj.pw"></el-input>
+                    </el-form-item> -->
+                <!-- </el-form> -->
+                <el-button @click="startFn">开始</el-button>
+            </el-aside>
+        </el-container>
     </div>
-  </div>
 </template>
-
 <script>
-  export default {
-    data () {
-      return {
-        electron: process.versions.electron,
-        name: this.$route.name,
-        node: process.versions.node,
-        path: this.$route.path,
-        platform: require('os').platform(),
-        vue: require('vue/package.json').version
-      }
+const dayjs = require('dayjs')
+const {remote} = require('electron')
+const puppeteer = require('puppeteer')
+const cronJob = require('cron').CronJob
+let page = null
+let browser = null
+
+let retryJob = '' // 重试任务
+
+
+
+const timeRange = ['16:00', '19:00']
+
+const targetTime = (t) => {
+    const timeArr = ['5:00', '6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00']
+    const sInd = timeArr.indexOf('16:00')
+    const eInd = timeArr.indexOf('19:00')
+    const choose = timeArr.slice(sInd, eInd)
+    let res = []
+    for (let i = 0; i < choose.length - 1; i++) {
+        res.push(`${choose[i]}-${choose[i+1]}`)
     }
-  }
+    return res
+}
+
+console.log(targetTime(timeRange))
+// 用户信息
+const selInfo = {
+    base_url: 'http://www.quyundong.com',
+    phone: '17621197159',
+    pass: 'nishibushisa11',
+    verifyCode: 'bbw8',
+    sid: 's%3AQce3nYlkjRu4fRFB8Q49XK68R6J6lNnl.BNG0fGAUlWGRoC62VSzFicF5lU%2BzvZvu2H0t7lKLdSs',
+    tr: targetTime(),
+    city_id: 321,
+    cat_id: '', // 种类
+    region_id: '', // 区域
+    random: Math.random()
+}
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export default {
+    name: "ss",
+    data() {
+        return {}
+    },
+    methods: {
+        async startFn() {
+            browser = await puppeteer.launch({
+                headless: false,
+                devtools: true, // 自动开启 F12
+                args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
+            });
+            page = await browser.newPage();
+            // 设置浏览器视窗
+            await page.setViewport({
+                width: 1376,
+                height: 768
+            });
+            // 监听新创建页面
+            await browser.on('targetcreated', async (target) =>{
+                const newTarget = await target.page()
+            })
+            // 请求拦截   //拦截图片
+            await page.setRequestInterception(true)
+            page.on('request', async req => {
+                //判断如果是 图片请求  就直接拦截 
+                if (req.resourceType() === 'image' ) {
+                    req.abort();   //终止请求
+                } else {
+                    req.continue();//弹出
+                }
+                // console.log(interceptedRequest.method(),'method')//输出GET
+            })
+
+
+            // 设置cookie
+            await page.setCookie({
+              name: "city_id",
+              value: ""+selInfo.city_id,
+              domain: ".quyundong.com",
+              path: '/',
+              secure: false,
+              session:false,
+              httpOnly: false
+            },{
+              name: "connect.sid",
+              value: selInfo.sid,
+              domain: ".quyundong.com",
+              path: '/',
+              secure: false,
+              session: false,
+              httpOnly: false,
+              expires: 1657375347
+            })
+            await page.goto(selInfo.base_url, {
+                waitUntil: "networkidle2"
+            })
+
+            const spaceRes = await page.evaluate((info) => {
+                // LOGIN
+                $.ajax({
+                    type: 'get',
+                    url: `${info.base_url}/user/userLogin?rondom=${info.random}&phone=${info.phone}&password=${info.pass}&code=${info.verifyCode}`
+                })
+                // 场地列表
+                // return $.ajax({
+                //     type:'get',
+                //     url: `http://www.quyundong.com/index/businesslist?random=${info.random}&page=1&cat_id=${info.cat_id}&region_id=${info.region_id}`,
+                // })
+            }, selInfo);
+
+            const hasOrder = await page.evaluate((info) => {
+                return $.ajax({
+                    type: 'get',
+                    url: `${info.base_url}/order/getOrderDueCount`
+                })
+            }, selInfo)
+            if (hasOrder.msg === 'success' && hasOrder.data && +hasOrder.data.count > 0) {
+                remote.dialog.showMessageBox({
+                    type:'info',
+                    title: 'message',
+                    message: '有未完成的订单，请先完成或取消未完成的订单，再重启程序',
+                    buttons:['ok']
+                },(index) => {
+                    process.exit()
+                })
+            }
+
+            this.orderXianXia()
+
+            // 遍历场地代码
+            // if (spaceRes.msg === 'success') {
+            //     const maxPage = +spaceRes.data.pages
+            //     const data = spaceRes.data.data
+            //     // 日期
+            //     const ts = dayjs().add(1, 'day').startOf('day').unix()
+                
+            //     for (let ind = 0; ind < data.length; ind ++) {
+            //         const url = `${selfInfo.base_url}/detail/${data[ind].business_id}-${data[ind].category_id}.html?t=${ts}`
+            //         await page.goto(url, {
+            //             waitUntil: "networkidle2"
+            //         })
+            //         const target = await browser.waitForTarget(t => t.url().includes('/detail'))
+            //         const tPage = await target.page()
+
+            //         const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
+            //         console.log(`正在查找${placeName}...`)
+
+            //         // const placeEmpty = false
+
+            //         const placeRes = await tPage.evaluate((info) => {
+            //             return document.querySelector(`.single[place_holder*="${info.tr.start}-${info.tr.end}"]`)
+            //         }, selInfo)
+                    
+            //         if (!placeRes) {
+            //             console.log(`${${placeName}订满了`)
+            //             continue
+            //         } else {
+            //             const spaceBtn = await tPage.waitForSelector(`.single[place_holder*="${selInfo.tr.start}-${selInfo.tr.end}"]`)
+            //             await spaceBtn.click()
+            //             console.log(`正在预定${placeName},${selInfo.tr.start}-${selInfo.tr.end}`)
+            //             // 提交按钮ß
+            //             const submitBtn = await tPage.waitForSelector('.submit-button')
+            //             await submitBtn.click()
+            //             await tPage.waitForNavigation()
+            //             // 确认订单按钮
+            //             const confirmBtn = await tPage.waitForSelector('.from-confirm .order')
+            //             sleep(1000)
+            //             await confirmBtn.click()
+            //             remote.dialog.showMessageBox({
+            //                 type:'info',
+            //                 title: 'message',
+            //                 message: '订场成功，请及时付款',
+            //                 buttons:['ok']
+            //             })
+            //             break
+            //         }
+            //     }
+            // }
+        },
+
+        async orderXianXia () {
+            const business_id = 22875
+            const category_id = 12
+            // const ts = dayjs().add(1, 'day').startOf('day').unix()
+            const ts = 1594915200 // 7月17日
+            const url = `${selInfo.base_url}/detail/${business_id}-${category_id}.html?t=${ts}`
+            await page.goto(url, {
+                waitUntil: "networkidle2"
+            })
+
+            const target = await browser.waitForTarget(t => t.url().includes('/detail'))
+            const tPage = await target.page()
+            const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
+            console.log(`正在查找${placeName}...`)
+
+            const placeRes = await tPage.evaluate((info) => {
+                const validPlace = []
+                for (let i = 0; i < info.tr.length; i++) {
+                    const target = document.querySelector(`.single[place_holder*="${info.tr[i]}"]`)
+                    if (target) {
+                        validPlace.push(`.single[place_holder*="${info.tr[i]}"]`)
+                    }
+                    // 一个人只抢2场
+                    if (validPlace.length === 2) {
+                        break
+                    }
+                } 
+                return validPlace
+            }, selInfo)
+
+            if (placeRes.length === 0) {
+                // 没有发现可用场地
+                console.log(`${placeName}订满了`)
+                if (!retryJob) {
+                    retryJob = new cronJob(
+                        '*/20 * * * * *',
+                        async() => {
+                            console.log('开始重试...')
+                            await this.orderXianXia()
+                        },
+                        // oncomplete
+                        null,
+                        // startNow
+                        true
+                    )
+                }
+            } else {
+                for (let i = 0; i < placeRes.length; i++) {
+                    // 发现场地
+                    console.log('发现场地...')
+                    const spaceBtn = await tPage.waitForSelector(`${placeRes[i]}`)
+                    await spaceBtn.click()
+                    console.log(`正在预定${placeName}`)
+                }
+                // 提交按钮ß
+                const submitBtn = await tPage.waitForSelector('.submit-button')
+                await submitBtn.click()
+                await tPage.waitForNavigation()
+                // 确认订单按钮
+                const confirmBtn = await tPage.waitForSelector('.from-confirm .order')
+                sleep(1000)
+                await confirmBtn.click()
+                console.log('订场结束...')
+                remote.dialog.showMessageBox({
+                    type:'info',
+                    title: 'message',
+                    message: '订场成功，请及时付款',
+                    buttons:['ok']
+                })
+            }
+        },
+    }
+}
 </script>
-
 <style scoped>
-  .title {
-    color: #888;
-    font-size: 18px;
-    font-weight: initial;
-    letter-spacing: .25px;
-    margin-top: 10px;
-  }
-
-  .items { margin-top: 8px; }
-
-  .item {
-    display: flex;
-    margin-bottom: 6px;
-  }
-
-  .item .name {
-    color: #6a6a6a;
-    margin-right: 6px;
-  }
-
-  .item .value {
-    color: #35495e;
-    font-weight: bold;
-  }
 </style>
