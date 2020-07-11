@@ -1,6 +1,6 @@
 {
-  "name": "order",
-  "productName": "order",
+  "name": "qyd-auto-order",
+  "productName": "qyd-auto-order",
   "version": "0.0.1",
   "author": "wangzhongbo <w_zb@foxmail.com>",
   "description": "An electron-vue project",
@@ -25,7 +25,7 @@
     "cron": "^1.8.2",
     "dayjs": "^1.8.29",
     "element-ui": "^2.13.2",
-    "puppeteer": "3.0.0",
+    "puppeteer": "2.1.0",
     "vue": "^2.5.16",
     "vue-electron": "^1.0.6",
     "vue-router": "^3.0.1",

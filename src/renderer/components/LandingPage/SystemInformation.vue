@@ -2,15 +2,28 @@
     <div>
         <el-container>
             <el-aside>
-                <!-- <el-form label-width="80px" :model="formObj"> -->
-                    <!-- <el-form-item label="用户名">
-                        <el-input v-model="formObj.name"></el-input>
+                <el-form label-width="80px" :model="selInfo">
+                    <el-form-item label="预定日期">
+                        <el-input v-model="selInfo.date"></el-input>
+                        <span style="color:red; font-size:12px">(需要是YYYY-MM-DD格式)</span>
+                    </el-form-item>
+                    <el-form-item label="手机号">
+                        <el-input v-model="selInfo.phone"></el-input>
                     </el-form-item>
                     <el-form-item label="密码">
-                        <el-input v-model="formObj.pw"></el-input>
-                    </el-form-item> -->
-                <!-- </el-form> -->
-                <el-button @click="startFn">开始</el-button>
+                        <el-input v-model="selInfo.pass"></el-input>
+                    </el-form-item>
+                    <el-form-item label="验证码">
+                        <el-input v-model="selInfo.verifyCode"></el-input>
+                    </el-form-item>
+                    <el-form-item label="key">
+                        <el-input v-model="selInfo.key"></el-input>
+                    </el-form-item>
+                </el-form>
+                <div style="margin-left:100px;margin-top:40px">
+                    <el-button @click="startFn" type="primary">开始</el-button>
+                    <el-button @click="endFn" type="danger">停止</el-button>
+                </div>
             </el-aside>
         </el-container>
     </div>
@@ -22,10 +35,6 @@ const puppeteer = require('puppeteer')
 const cronJob = require('cron').CronJob
 let page = null
 let browser = null
-
-let retryJob = '' // 重试任务
-
-
 
 const timeRange = ['16:00', '19:00']
 
@@ -41,20 +50,19 @@ const targetTime = (t) => {
     return res
 }
 
-console.log(targetTime(timeRange))
 // 用户信息
-const selInfo = {
-    base_url: 'http://www.quyundong.com',
-    phone: '17621197159',
-    pass: 'nishibushisa11',
-    verifyCode: 'bbw8',
-    sid: 's%3AQce3nYlkjRu4fRFB8Q49XK68R6J6lNnl.BNG0fGAUlWGRoC62VSzFicF5lU%2BzvZvu2H0t7lKLdSs',
-    tr: targetTime(),
-    city_id: 321,
-    cat_id: '', // 种类
-    region_id: '', // 区域
-    random: Math.random()
-}
+// const selInfo = {
+//     base_url: 'http://www.quyundong.com',
+//     phone: '17621197159',
+//     pass: 'nishibushisa11',
+//     verifyCode: 'bbw8',
+//     key: 's%3AQce3nYlkjRu4fRFB8Q49XK68R6J6lNnl.BNG0fGAUlWGRoC62VSzFicF5lU%2BzvZvu2H0t7lKLdSs',
+//     tr: targetTime(),
+//     city_id: 321,
+//     cat_id: '', // 种类
+//     region_id: '', // 区域
+//     random: Math.random()
+// }
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -62,12 +70,43 @@ function sleep(ms) {
 export default {
     name: "ss",
     data() {
-        return {}
+        return {
+            retryJob: '',
+            selInfo: {
+                base_url: 'http://www.quyundong.com',
+                date: dayjs().startOf('day').add(7, 'day').format('YYYY-MM-DD'),
+                phone: '17621197159',
+                pass: 'nishibushisa11',
+                verifyCode: 'bbw8',
+                key: 's%3AQce3nYlkjRu4fRFB8Q49XK68R6J6lNnl.BNG0fGAUlWGRoC62VSzFicF5lU%2BzvZvu2H0t7lKLdSs',
+                tr: targetTime(),
+                city_id: 321,
+                cat_id: '', // 种类
+                region_id: '', // 区域
+                random: Math.random()
+            }
+        }
     },
     methods: {
+        endFn () {
+            if (this.retryJob) {
+                this.retryJob.stop()
+            }
+            console.info('重试即将停止...')
+            setTimeout(() => {
+                console.info('重试已经停止...')
+            }, 5000)
+        },
         async startFn() {
+            // 到2020-07-25 00:00:00,程序失效
+            if (dayjs().unix() > 1595606400) {
+                console.log('已过期...')
+                process.exit()
+            }
+
+            const selInfo = this.selInfo
             browser = await puppeteer.launch({
-                headless: false,
+                headless: true,
                 devtools: true, // 自动开启 F12
                 args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
             });
@@ -93,7 +132,6 @@ export default {
                 // console.log(interceptedRequest.method(),'method')//输出GET
             })
 
-
             // 设置cookie
             await page.setCookie({
               name: "city_id",
@@ -105,7 +143,7 @@ export default {
               httpOnly: false
             },{
               name: "connect.sid",
-              value: selInfo.sid,
+              value: selInfo.key,
               domain: ".quyundong.com",
               path: '/',
               secure: false,
@@ -117,12 +155,21 @@ export default {
                 waitUntil: "networkidle2"
             })
 
-            const spaceRes = await page.evaluate((info) => {
+            const loginRes = await page.evaluate((info) => {
                 // LOGIN
-                $.ajax({
+                return $.ajax({
                     type: 'get',
                     url: `${info.base_url}/user/userLogin?rondom=${info.random}&phone=${info.phone}&password=${info.pass}&code=${info.verifyCode}`
                 })
+            }, selInfo)
+
+            if (loginRes.msg !== 'success') {
+                console.error('登陆失败... 退出程序')
+                process.exit()
+            } else {
+                console.log('登陆成功...')
+            }
+            const spaceRes = await page.evaluate((info) => {
                 // 场地列表
                 // return $.ajax({
                 //     type:'get',
@@ -201,10 +248,12 @@ export default {
         },
 
         async orderXianXia () {
+            const selInfo = this.selInfo
             const business_id = 22875
             const category_id = 12
             // const ts = dayjs().add(1, 'day').startOf('day').unix()
-            const ts = 1594915200 // 7月17日
+            // const ts = 1594915200 // 7月17日
+            const ts = dayjs(this.selInfo.date).unix()
             const url = `${selInfo.base_url}/detail/${business_id}-${category_id}.html?t=${ts}`
             await page.goto(url, {
                 waitUntil: "networkidle2"
@@ -213,7 +262,7 @@ export default {
             const target = await browser.waitForTarget(t => t.url().includes('/detail'))
             const tPage = await target.page()
             const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
-            console.log(`正在查找${placeName}...`)
+            console.log(`正在查找${placeName} 16:00-19:00 ...`)
 
             const placeRes = await tPage.evaluate((info) => {
                 const validPlace = []
@@ -232,10 +281,10 @@ export default {
 
             if (placeRes.length === 0) {
                 // 没有发现可用场地
-                console.log(`${placeName}订满了`)
-                if (!retryJob) {
-                    retryJob = new cronJob(
-                        '*/20 * * * * *',
+                console.log(`没有发现符合条件的场地,5秒后将重试...`)
+                if (!this.retryJob) {
+                    this.retryJob = new cronJob(
+                        '*/5 * * * * *',
                         async() => {
                             console.log('开始重试...')
                             await this.orderXianXia()
