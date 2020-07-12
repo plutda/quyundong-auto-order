@@ -132,7 +132,7 @@ export default {
 
             const selInfo = this.selInfo
             browser = await puppeteer.launch({
-                headless: false,
+                headless: true,
                 devtools: true, // 自动开启 F12
                 args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
             });
