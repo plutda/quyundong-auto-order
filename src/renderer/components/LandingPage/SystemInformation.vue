@@ -119,6 +119,10 @@ export default {
                     process.exit()
                 }
 
+                if (browser) {
+                    browser.close()
+                }
+
                 if (this.retryJob) {
                     this.retryJob.stop()
                     this.retryJob = ''
