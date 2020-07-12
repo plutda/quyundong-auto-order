@@ -17,7 +17,7 @@
                         <el-input v-model="selInfo.verifyCode"></el-input>
                     </el-form-item>
                     <el-form-item label="key">
-                        <el-input v-model="selInfo.key"></el-input>
+                        <el-input type="textarea" :autosize="{ minRows: 4, maxRows: 6}" v-model="selInfo.key"></el-input>
                     </el-form-item>
                 </el-form>
                 <div style="margin-left:100px;margin-top:40px">
@@ -74,7 +74,7 @@ export default {
             retryJob: '',
             selInfo: {
                 base_url: 'http://www.quyundong.com',
-                date: dayjs().startOf('day').add(7, 'day').format('YYYY-MM-DD'),
+                date: '',
                 phone: '17621197159',
                 pass: 'nishibushisa11',
                 verifyCode: 'bbw8',
@@ -84,7 +84,15 @@ export default {
                 cat_id: '', // 种类
                 region_id: '', // 区域
                 random: Math.random()
-            }
+            },
+            run: false
+        }
+    },
+    created () {
+        if (dayjs().isBefore(dayjs(`${dayjs().format('YYYY-MM-DD')} 12:00:00`))) {
+            this.selInfo.date = dayjs().startOf('day').add(6, 'day').format('YYYY-MM-DD')
+        } else {
+            this.selInfo.date = dayjs().startOf('day').add(7, 'day').format('YYYY-MM-DD')
         }
     },
     methods: {
@@ -101,12 +109,30 @@ export default {
             // 到2020-07-25 00:00:00,程序失效
             if (dayjs().unix() > 1595606400) {
                 console.log('已过期...')
+                console.log('程序退出...')
                 process.exit()
             }
 
+            if (this.retryJob) {
+                this.retryJob.stop()
+            }
+
+            console.log('开始登陆...')
+            if (this.run) {
+                remote.dialog.showMessageBox({
+                    type:'info',
+                    title: 'message',
+                    message: '程序已经在运行',
+                    buttons:['ok']
+                })
+                return
+            }
+
+            this.run = true
+
             const selInfo = this.selInfo
             browser = await puppeteer.launch({
-                headless: true,
+                headless: false,
                 devtools: true, // 自动开启 F12
                 args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
             });
@@ -167,7 +193,7 @@ export default {
                 console.error('登陆失败... 退出程序')
                 process.exit()
             } else {
-                console.log('登陆成功...')
+                console.log(`用户: ${loginRes.nick_name} 登陆成功...`)
             }
             const spaceRes = await page.evaluate((info) => {
                 // 场地列表
@@ -194,7 +220,8 @@ export default {
                 })
             }
 
-            this.orderXianXia()
+            await this.orderXianXia()
+            this.run = false
 
             // 遍历场地代码
             // if (spaceRes.msg === 'success') {
@@ -300,24 +327,42 @@ export default {
                     // 发现场地
                     console.log('发现场地...')
                     const spaceBtn = await tPage.waitForSelector(`${placeRes[i]}`)
+                    sleep(1000)
                     await spaceBtn.click()
-                    console.log(`正在预定${placeName}`)
-                }
+                 }
                 // 提交按钮ß
                 const submitBtn = await tPage.waitForSelector('.submit-button')
+                sleep(1000)
                 await submitBtn.click()
+                
                 await tPage.waitForNavigation()
                 // 确认订单按钮
                 const confirmBtn = await tPage.waitForSelector('.from-confirm .order')
                 sleep(1000)
                 await confirmBtn.click()
-                console.log('订场结束...')
-                remote.dialog.showMessageBox({
-                    type:'info',
-                    title: 'message',
-                    message: '订场成功，请及时付款',
-                    buttons:['ok']
-                })
+                // 是否超出时间范围
+                // const pageList = await browser.pages()
+                // console.log('pageList:', pageList)
+                // // 超过可预订范围
+                // const otherPage = pageList.find(item=>item.url().includes('/addOrder'))
+                // console.log('otherPage:', otherPage)
+                await tPage.waitForNavigation()
+                sleep(1000)
+
+                if (tPage.target()._targetInfo.url.indexOf('order/orderPay') > -1) {
+                    console.log(`正在预定${placeName}`)
+                    console.log('订场结束...')
+                    remote.dialog.showMessageBox({
+                        type:'info',
+                        title: 'message',
+                        message: '订场成功，请及时付款',
+                        buttons:['ok']
+                    })
+                } else {
+                    console.log(`该场次不在可预订周期内...`)
+                    console.log(`请选择可预订时的时间...`)
+                    browser.close()
+                }
             }
         },
     }

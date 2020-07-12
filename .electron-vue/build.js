@@ -31,7 +31,7 @@ function clean () {
 
 function build () {
   greeting()
-
+  
   del.sync(['dist/electron/*', '!.gitkeep'])
 
   const tasks = ['main', 'renderer']
