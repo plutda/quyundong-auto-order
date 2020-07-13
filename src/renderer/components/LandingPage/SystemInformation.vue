@@ -50,19 +50,6 @@ const targetTime = (t) => {
     return res
 }
 
-// 用户信息
-// const selInfo = {
-//     base_url: 'http://www.quyundong.com',
-//     phone: '17621197159',
-//     pass: 'nishibushisa11',
-//     verifyCode: 'bbw8',
-//     key: 's%3AQce3nYlkjRu4fRFB8Q49XK68R6J6lNnl.BNG0fGAUlWGRoC62VSzFicF5lU%2BzvZvu2H0t7lKLdSs',
-//     tr: targetTime(),
-//     city_id: 321,
-//     cat_id: '', // 种类
-//     region_id: '', // 区域
-//     random: Math.random()
-// }
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -85,7 +72,9 @@ export default {
                 region_id: '', // 区域
                 random: Math.random()
             },
-            run: false
+            run: false,
+            flag1: false,
+            flag2: false
         }
     },
     created () {
@@ -106,9 +95,6 @@ export default {
             }
             this.run = false
             console.info('重试已经停止...')
-            // setTimeout(() => {
-            //     console.info('重试已经停止...')
-            // }, 5000)
         },
         async startFn() {
             try {
@@ -143,7 +129,7 @@ export default {
 
                 const selInfo = this.selInfo
                 browser = await puppeteer.launch({
-                    headless: true,
+                    headless: false,
                     devtools: true, // 自动开启 F12
                     args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
                 });
@@ -154,14 +140,14 @@ export default {
                     height: 768
                 });
                 // 监听新创建页面
-                await browser.on('targetcreated', async (target) =>{
-                    const newTarget = await target.page()
-                })
+                // await browser.on('targetcreated', async (target) =>{
+                //     const newTarget = await target.page()
+                // })
                 // 请求拦截   //拦截图片
                 await page.setRequestInterception(true)
                 page.on('request', async req => {
-                    //判断如果是 图片请求  就直接拦截 
-                    if (req.resourceType() === 'image' ) {
+                    //判断如果是 图片请求 和css  就直接拦截 
+                    if (req.resourceType() === 'image' || req.url().endsWith('.css')) {
                         req.abort();   //终止请求
                     } else {
                         req.continue();//弹出
@@ -171,22 +157,22 @@ export default {
 
                 // 设置cookie
                 await page.setCookie({
-                name: "city_id",
-                value: ""+selInfo.city_id,
-                domain: ".quyundong.com",
-                path: '/',
-                secure: false,
-                session:false,
-                httpOnly: false
+                    name: "city_id",
+                    value: ""+selInfo.city_id,
+                    domain: ".quyundong.com",
+                    path: '/',
+                    secure: false,
+                    session:false,
+                    httpOnly: false
                 },{
-                name: "connect.sid",
-                value: selInfo.key,
-                domain: ".quyundong.com",
-                path: '/',
-                secure: false,
-                session: false,
-                httpOnly: false,
-                expires: 1657375347
+                    name: "connect.sid",
+                    value: selInfo.key,
+                    domain: ".quyundong.com",
+                    path: '/',
+                    secure: false,
+                    session: false,
+                    httpOnly: false,
+                    expires: 1657375347
                 })
                 await page.goto(selInfo.base_url, {
                     waitUntil: "networkidle2"
@@ -202,17 +188,18 @@ export default {
 
                 if (loginRes.msg !== 'success') {
                     console.error('登陆失败... 退出程序')
-                    process.exit()
+                    browser.close()
+                    this.run = false
                 } else {
                     console.log(`用户: ${loginRes.nick_name} 登陆成功...`)
                 }
-                const spaceRes = await page.evaluate((info) => {
+                // const spaceRes = await page.evaluate((info) => {
                     // 场地列表
                     // return $.ajax({
                     //     type:'get',
                     //     url: `http://www.quyundong.com/index/businesslist?random=${info.random}&page=1&cat_id=${info.cat_id}&region_id=${info.region_id}`,
                     // })
-                }, selInfo);
+                // }, selInfo);
 
                 const hasOrder = await page.evaluate((info) => {
                     return $.ajax({
@@ -220,6 +207,7 @@ export default {
                         url: `${info.base_url}/order/getOrderDueCount`
                     })
                 }, selInfo)
+
                 if (hasOrder.msg === 'success' && hasOrder.data && +hasOrder.data.count > 0) {
                     remote.dialog.showMessageBox({
                         type:'info',
@@ -227,7 +215,8 @@ export default {
                         message: '有未完成的订单，请先完成或取消未完成的订单，再重启程序',
                         buttons:['ok']
                     },(index) => {
-                        process.exit()
+                        browser.close()
+                        this.run = false
                     })
                 }
 
@@ -291,6 +280,8 @@ export default {
 
         async orderXianXia () {
             try {
+                this.flag1 = false
+                this.flag2 = false
                 const selInfo = this.selInfo
                 const business_id = 22875
                 const category_id = 12
@@ -299,15 +290,17 @@ export default {
                 const ts = dayjs(this.selInfo.date).unix()
                 const url = `${selInfo.base_url}/detail/${business_id}-${category_id}.html?t=${ts}`
                 await page.goto(url, {
-                    waitUntil: "networkidle2"
+                    waitUntil: "networkidle0"
                 })
 
-                const target = await browser.waitForTarget(t => t.url().includes('/detail'))
-                const tPage = await target.page()
-                const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
-                console.log(`正在查找${placeName} 16:00-19:00 ...`)
+                // await page.waitForNavigation()
 
-                const placeRes = await tPage.evaluate((info) => {
+                // const target = await browser.waitForTarget(t => t.url().includes('/detail'))
+                // const tPage = await target.page()
+                // const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
+                console.log(`正在查找...`)
+
+                const placeRes = await page.evaluate((info) => {
                     const validPlace = []
                     for (let i = 0; i < info.tr.length; i++) {
                         const target = document.querySelector(`.single[place_holder*="${info.tr[i]}"]`)
@@ -321,16 +314,20 @@ export default {
                     } 
                     return validPlace
                 }, selInfo)
+                
+                this.flag1 = true
 
                 if (placeRes.length === 0) {
                     // 没有发现可用场地
-                    console.log(`没有发现符合条件的场地,5秒后将重试...`)
+                    console.log(`没有发现符合条件的场地,即将开始重试...`)
                     if (!this.retryJob) {
                         this.retryJob = new cronJob(
-                            '*/5 * * * * *',
+                            '*/1 * * * * *',
                             async() => {
-                                console.log('开始重试...')
-                                await this.orderXianXia()
+                                if (this.flag1) {
+                                    console.log('开始重试...')
+                                    await this.orderXianXia()
+                                }
                             },
                             // oncomplete
                             null,
@@ -339,51 +336,127 @@ export default {
                         )
                     }
                 } else {
-                    for (let i = 0; i < placeRes.length; i++) {
-                        // 发现场地
-                        console.log('发现场地...')
-                        const spaceBtn = await tPage.waitForSelector(`${placeRes[i]}`)
-                        sleep(1000)
-                        await spaceBtn.click()
-                    }
-                    // 提交按钮ß
-                    sleep(1000)
-                    const submitBtn = await tPage.waitForSelector('.submit-button.active')
-                    await submitBtn.click()
+                    // for (let i = 0; i < placeRes.length; i++) {
+                    //     // 发现场地
+                    //     // console.log('发现场地...')
+                    //     const spaceBtn = await page.waitForSelector(`${placeRes[i]}`)
+                    //     await spaceBtn.click()
+                    // }
+                    // // 提交按钮ß
+                    // const submitBtn = await page.waitForSelector('.submit-button.active')
+                    // await submitBtn.click()
                     
-                    await tPage.waitForNavigation()
-                    // 确认订单按钮
-                    const confirmBtn = await tPage.waitForSelector('.from-confirm .order')
-                    sleep(1000)
-                    await confirmBtn.click()
-                    // 是否超出时间范围
-                    // const pageList = await browser.pages()
-                    // console.log('pageList:', pageList)
-                    // // 超过可预订范围
-                    // const otherPage = pageList.find(item=>item.url().includes('/addOrder'))
-                    // console.log('otherPage:', otherPage)
-                    await tPage.waitForNavigation()
-                    sleep(1000)
+                    // await page.waitForNavigation()
+                    // // 确认订单按钮
+                    // const confirmBtn = await page.waitForSelector('.from-confirm .order')
+                    // await confirmBtn.click()
 
-                    if (tPage.target()._targetInfo.url.indexOf('order/orderPay') > -1) {
-                        console.log(`正在预定${placeName}`)
-                        console.log('订场结束...')
+                    // 直接提交订单
+                    const orderRes = await page.evaluate((place) => {
+                        let ids = []
+                        for (let i = 0; i < place.length; i++) {
+                            const spaceBtn = document.querySelector(`${place[i]}`)
+                            ids.push($(`${place[i]}`).attr('goods_id').split(',')[0])
+                            spaceBtn.click()
+                        }
+                        return $.ajax({
+                            type: 'post',
+                            url: `http://www.quyundong.com/order/addOrder`,
+                            data: {
+                                order_type: 0,
+                                goods_id: ids.join(','),
+                                goods_number: 1
+                            }
+                        })
+                    }, placeRes)
+
+                    const canOrder = orderRes.indexOf('该场次不在可预定周期内') > -1
+                    this.flag2 = true
+
+                    if (canOrder) {
+                        console.log(`该场次暂不在可预订周期内...`)
+                        if (!this.retryJob) {
+                            this.retryJob = new cronJob(
+                                '*/1 * * * * *',
+                                async() => {
+                                    if (this.flag2) {
+                                        console.log('开始重试...')
+                                        await this.orderXianXia()
+                                    }
+                                },
+                                // oncomplete
+                                null,
+                                // startNow
+                                true
+                            )
+                        }
+                    } else {
+                        console.log(`正在预定...`)
+                        browser.close()
+
+                        if (this.retryJob) {
+                            this.retryJob.stop()
+                            this.retryJob = ''
+                        }
+
                         remote.dialog.showMessageBox({
                             type:'info',
                             title: 'message',
                             message: '订场成功，请及时付款',
                             buttons:['ok']
                         })
-                    } else {
-                        console.log(`该场次不在可预订周期内...`)
-                        console.log(`请选择可预订的时间...`)
-                        browser.close()
                     }
+                    // debugger
+
+                    // 是否超出时间范围
+                    // const pageList = await browser.pages()
+                    // console.log('pageList:', pageList)
+                    // // 超过可预订范围
+                    // const otherPage = pageList.find(item=>item.url().includes('/addOrder'))
+                    // console.log('otherPage:', otherPage)
+                    // await page.waitForNavigation()
+
+                    // const isPayPage = page.target()._targetInfo.url.indexOf('order/orderPay') > -1
+                    // this.flag2 = true
+
+                    // if (isPayPage) {
+                    //     console.log(`正在预定...`)
+
+                    //     browser.close()
+
+                    //     if (this.retryJob) {
+                    //         this.retryJob.stop()
+                    //         this.retryJob = ''
+                    //     }
+
+                    //     remote.dialog.showMessageBox({
+                    //         type:'info',
+                    //         title: 'message',
+                    //         message: '订场成功，请及时付款',
+                    //         buttons:['ok']
+                    //     })
+                    // } else {
+                    //     console.log(`该场次暂不在可预订周期内...`)
+                    //     if (!this.retryJob) {
+                    //         this.retryJob = new cronJob(
+                    //             '*/1 * * * * *',
+                    //             async() => {
+                    //                 if (this.flag2) {
+                    //                     console.log('开始重试...')
+                    //                     await this.orderXianXia()
+                    //                 }
+                    //             },
+                    //             // oncomplete
+                    //             null,
+                    //             // startNow
+                    //             true
+                    //         )
+                    //     }
+                    // }
                 }
             } catch (e) {
 
             }
-            
         },
     }
 }
