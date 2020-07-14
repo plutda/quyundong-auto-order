@@ -3,9 +3,12 @@
         <el-container>
             <el-aside>
                 <el-form label-width="80px" :model="selInfo">
-                    <el-form-item label="预定日期">
+                    <!-- <el-form-item label="预定日期">
                         <el-input v-model="selInfo.date"></el-input>
                         <span style="color:red; font-size:12px">(需要是YYYY-MM-DD格式)</span>
+                    </el-form-item> -->
+                    <el-form-item label="场地ids">
+                        <el-input v-model="selInfo.ids"></el-input>
                     </el-form-item>
                     <el-form-item label="手机号">
                         <el-input v-model="selInfo.phone"></el-input>
@@ -58,8 +61,9 @@ export default {
     name: "ss",
     data() {
         return {
-            retryJob: '',
+            retryTimer: '',
             selInfo: {
+                ids: '353544763,353544764',
                 base_url: 'http://www.quyundong.com',
                 date: '',
                 phone: '17621197159',
@@ -86,9 +90,9 @@ export default {
     },
     methods: {
         endFn () {
-            if (this.retryJob) {
-                this.retryJob.stop()
-                this.retryJob = ''
+            if (this.retryTimer) {
+                clearInterval(this.retryTimer)
+                this.retryTimer = null
             }
             if (browser) {
                 browser.close()
@@ -109,9 +113,9 @@ export default {
                     browser.close()
                 }
 
-                if (this.retryJob) {
-                    this.retryJob.stop()
-                    this.retryJob = ''
+                if (this.retryTimer) {
+                    clearInterval(this.retryTimer)
+                    this.retryTimer = null
                 }
 
                 console.log('开始登陆...')
@@ -129,7 +133,7 @@ export default {
 
                 const selInfo = this.selInfo
                 browser = await puppeteer.launch({
-                    headless: false,
+                    headless: true,
                     devtools: true, // 自动开启 F12
                     args: ['--start-maximized', '--disable-infobars', '--no-sandbox', '--disable-setuid-sandbox']
                 });
@@ -138,21 +142,16 @@ export default {
                 await page.setViewport({
                     width: 1376,
                     height: 768
-                });
-                // 监听新创建页面
-                // await browser.on('targetcreated', async (target) =>{
-                //     const newTarget = await target.page()
-                // })
+                })
                 // 请求拦截   //拦截图片
                 await page.setRequestInterception(true)
                 page.on('request', async req => {
                     //判断如果是 图片请求 和css  就直接拦截 
-                    if (req.resourceType() === 'image' || req.url().endsWith('.css')) {
+                    if (req.resourceType() === 'Image' || req.resourceType() === 'Stylesheet' || req.resourceType() === 'Font') {
                         req.abort();   //终止请求
                     } else {
                         req.continue();//弹出
                     }
-                    // console.log(interceptedRequest.method(),'method')//输出GET
                 })
 
                 // 设置cookie
@@ -193,13 +192,6 @@ export default {
                 } else {
                     console.log(`用户: ${loginRes.nick_name} 登陆成功...`)
                 }
-                // const spaceRes = await page.evaluate((info) => {
-                    // 场地列表
-                    // return $.ajax({
-                    //     type:'get',
-                    //     url: `http://www.quyundong.com/index/businesslist?random=${info.random}&page=1&cat_id=${info.cat_id}&region_id=${info.region_id}`,
-                    // })
-                // }, selInfo);
 
                 const hasOrder = await page.evaluate((info) => {
                     return $.ajax({
@@ -221,57 +213,8 @@ export default {
                 }
 
                 await this.orderXianXia()
+
                 this.run = false
-
-                // 遍历场地代码
-                // if (spaceRes.msg === 'success') {
-                //     const maxPage = +spaceRes.data.pages
-                //     const data = spaceRes.data.data
-                //     // 日期
-                //     const ts = dayjs().add(1, 'day').startOf('day').unix()
-                    
-                //     for (let ind = 0; ind < data.length; ind ++) {
-                //         const url = `${selfInfo.base_url}/detail/${data[ind].business_id}-${data[ind].category_id}.html?t=${ts}`
-                //         await page.goto(url, {
-                //             waitUntil: "networkidle2"
-                //         })
-                //         const target = await browser.waitForTarget(t => t.url().includes('/detail'))
-                //         const tPage = await target.page()
-
-                //         const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
-                //         console.log(`正在查找${placeName}...`)
-
-                //         // const placeEmpty = false
-
-                //         const placeRes = await tPage.evaluate((info) => {
-                //             return document.querySelector(`.single[place_holder*="${info.tr.start}-${info.tr.end}"]`)
-                //         }, selInfo)
-                        
-                //         if (!placeRes) {
-                //             console.log(`${${placeName}订满了`)
-                //             continue
-                //         } else {
-                //             const spaceBtn = await tPage.waitForSelector(`.single[place_holder*="${selInfo.tr.start}-${selInfo.tr.end}"]`)
-                //             await spaceBtn.click()
-                //             console.log(`正在预定${placeName},${selInfo.tr.start}-${selInfo.tr.end}`)
-                //             // 提交按钮ß
-                //             const submitBtn = await tPage.waitForSelector('.submit-button')
-                //             await submitBtn.click()
-                //             await tPage.waitForNavigation()
-                //             // 确认订单按钮
-                //             const confirmBtn = await tPage.waitForSelector('.from-confirm .order')
-                //             sleep(1000)
-                //             await confirmBtn.click()
-                //             remote.dialog.showMessageBox({
-                //                 type:'info',
-                //                 title: 'message',
-                //                 message: '订场成功，请及时付款',
-                //                 buttons:['ok']
-                //             })
-                //             break
-                //         }
-                //     }
-                // }
             } catch (e) {
 
             }
@@ -280,179 +223,65 @@ export default {
 
         async orderXianXia () {
             try {
-                this.flag1 = false
                 this.flag2 = false
-                const selInfo = this.selInfo
-                const business_id = 22875
-                const category_id = 12
-                // const ts = dayjs().add(1, 'day').startOf('day').unix()
-                // const ts = 1594915200 // 7月17日
-                const ts = dayjs(this.selInfo.date).unix()
-                const url = `${selInfo.base_url}/detail/${business_id}-${category_id}.html?t=${ts}`
-                await page.goto(url, {
-                    waitUntil: "networkidle0"
-                })
-
-                // await page.waitForNavigation()
-
-                // const target = await browser.waitForTarget(t => t.url().includes('/detail'))
-                // const tPage = await target.page()
-                // const placeName = await tPage.$eval('.venuesName', dom => dom.innerText)
                 console.log(`正在查找...`)
-
-                const placeRes = await page.evaluate((info) => {
-                    const validPlace = []
-                    for (let i = 0; i < info.tr.length; i++) {
-                        const target = document.querySelector(`.single[place_holder*="${info.tr[i]}"]`)
-                        if (target) {
-                            validPlace.push(`.single[place_holder*="${info.tr[i]}"]`)
+                // 直接提交订单
+                const orderRes = await page.evaluate((info) => {
+                    // id写死
+                    const ids = info.ids
+                    // const ids = ['352061397', '352061398']
+                    return $.ajax({
+                        type: 'post',
+                        url: `http://www.quyundong.com/order/addOrder`,
+                        data: {
+                            order_type: 0,
+                            goods_id: ids,
+                            goods_number: 1
                         }
-                        // 一个人只抢2场
-                        if (validPlace.length === 2) {
-                            break
-                        }
-                    } 
-                    return validPlace
-                }, selInfo)
-                
-                this.flag1 = true
+                    })
+                }, this.selInfo)
 
-                if (placeRes.length === 0) {
-                    // 没有发现可用场地
-                    console.log(`没有发现符合条件的场地,即将开始重试...`)
-                    if (!this.retryJob) {
-                        this.retryJob = new cronJob(
-                            '*/1 * * * * *',
-                            async() => {
-                                if (this.flag1) {
-                                    console.log('开始重试...')
-                                    await this.orderXianXia()
-                                }
-                            },
-                            // oncomplete
-                            null,
-                            // startNow
-                            true
-                        )
+                const inPayPage = orderRes.indexOf('<title>订单支付 - 趣运动</title>') > -1
+
+                this.flag2 = true
+
+                if (inPayPage) {
+                    console.log(`正在预定...`)
+                    browser.close()
+
+                    if (this.retryTimer) {
+                        clearInterval(this.retryTimer)
+                        this.retryTimer = null
                     }
+
+                    remote.dialog.showMessageBox({
+                        type:'info',
+                        title: 'message',
+                        message: '订场成功，请及时付款',
+                        buttons:['ok']
+                    })
                 } else {
-                    // for (let i = 0; i < placeRes.length; i++) {
-                    //     // 发现场地
-                    //     // console.log('发现场地...')
-                    //     const spaceBtn = await page.waitForSelector(`${placeRes[i]}`)
-                    //     await spaceBtn.click()
-                    // }
-                    // // 提交按钮ß
-                    // const submitBtn = await page.waitForSelector('.submit-button.active')
-                    // await submitBtn.click()
-                    
-                    // await page.waitForNavigation()
-                    // // 确认订单按钮
-                    // const confirmBtn = await page.waitForSelector('.from-confirm .order')
-                    // await confirmBtn.click()
-
-                    // 直接提交订单
-                    const orderRes = await page.evaluate((place) => {
-                        let ids = []
-                        for (let i = 0; i < place.length; i++) {
-                            const spaceBtn = document.querySelector(`${place[i]}`)
-                            ids.push($(`${place[i]}`).attr('goods_id').split(',')[0])
-                            spaceBtn.click()
-                        }
-                        return $.ajax({
-                            type: 'post',
-                            url: `http://www.quyundong.com/order/addOrder`,
-                            data: {
-                                order_type: 0,
-                                goods_id: ids.join(','),
-                                goods_number: 1
+                    console.log(`该场次暂不可预订...`)
+                    if (!this.retryTimer) {
+                        this.retryTimer = setInterval(async() => {
+                            if (this.flag2) {
+                                await this.orderXianXia()
                             }
-                        })
-                    }, placeRes)
-
-                    const canOrder = orderRes.indexOf('该场次不在可预定周期内') > -1
-                    this.flag2 = true
-
-                    if (canOrder) {
-                        console.log(`该场次暂不在可预订周期内...`)
-                        if (!this.retryJob) {
-                            this.retryJob = new cronJob(
-                                '*/1 * * * * *',
-                                async() => {
-                                    if (this.flag2) {
-                                        console.log('开始重试...')
-                                        await this.orderXianXia()
-                                    }
-                                },
-                                // oncomplete
-                                null,
-                                // startNow
-                                true
-                            )
-                        }
-                    } else {
-                        console.log(`正在预定...`)
-                        browser.close()
-
-                        if (this.retryJob) {
-                            this.retryJob.stop()
-                            this.retryJob = ''
-                        }
-
-                        remote.dialog.showMessageBox({
-                            type:'info',
-                            title: 'message',
-                            message: '订场成功，请及时付款',
-                            buttons:['ok']
-                        })
+                        }, 100)
+                        // this.retryJob = new cronJob(
+                        //     '*/1 * * * * *',
+                        //     async() => {
+                        //         if (this.flag2) {
+                        //             console.log('开始重试...')
+                        //             await this.orderXianXia()
+                        //         }
+                        //     },
+                        //     // oncomplete
+                        //     null,
+                        //     // startNow
+                        //     true
+                        // )
                     }
-                    // debugger
-
-                    // 是否超出时间范围
-                    // const pageList = await browser.pages()
-                    // console.log('pageList:', pageList)
-                    // // 超过可预订范围
-                    // const otherPage = pageList.find(item=>item.url().includes('/addOrder'))
-                    // console.log('otherPage:', otherPage)
-                    // await page.waitForNavigation()
-
-                    // const isPayPage = page.target()._targetInfo.url.indexOf('order/orderPay') > -1
-                    // this.flag2 = true
-
-                    // if (isPayPage) {
-                    //     console.log(`正在预定...`)
-
-                    //     browser.close()
-
-                    //     if (this.retryJob) {
-                    //         this.retryJob.stop()
-                    //         this.retryJob = ''
-                    //     }
-
-                    //     remote.dialog.showMessageBox({
-                    //         type:'info',
-                    //         title: 'message',
-                    //         message: '订场成功，请及时付款',
-                    //         buttons:['ok']
-                    //     })
-                    // } else {
-                    //     console.log(`该场次暂不在可预订周期内...`)
-                    //     if (!this.retryJob) {
-                    //         this.retryJob = new cronJob(
-                    //             '*/1 * * * * *',
-                    //             async() => {
-                    //                 if (this.flag2) {
-                    //                     console.log('开始重试...')
-                    //                     await this.orderXianXia()
-                    //                 }
-                    //             },
-                    //             // oncomplete
-                    //             null,
-                    //             // startNow
-                    //             true
-                    //         )
-                    //     }
-                    // }
                 }
             } catch (e) {
 
