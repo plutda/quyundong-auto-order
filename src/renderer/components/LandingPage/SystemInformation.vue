@@ -53,17 +53,14 @@ const targetTime = (t) => {
     return res
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 export default {
     name: "ss",
     data() {
         return {
-            retryTimer: '',
+            retryJob: '',
             selInfo: {
-                ids: '353544763,353544764',
+                // 要抢的场次id
+                ids: '353757388,353757389',
                 base_url: 'http://www.quyundong.com',
                 date: '',
                 phone: '17621197159',
@@ -90,9 +87,9 @@ export default {
     },
     methods: {
         endFn () {
-            if (this.retryTimer) {
-                clearInterval(this.retryTimer)
-                this.retryTimer = null
+            if (this.retryJob) {
+                this.retryJob.stop()
+                this.retryJob = null
             }
             if (browser) {
                 browser.close()
@@ -113,9 +110,9 @@ export default {
                     browser.close()
                 }
 
-                if (this.retryTimer) {
-                    clearInterval(this.retryTimer)
-                    this.retryTimer = null
+                if (this.retryJob) {
+                    this.retryJob.stop()
+                    this.retryJob = null
                 }
 
                 console.log('开始登陆...')
@@ -212,24 +209,41 @@ export default {
                     })
                 }
 
+                const business_id = 22875
+                const category_id = 12
+                // const ts = dayjs().add(1, 'day').startOf('day').unix()
+                // const ts = 1594915200 // 7月17日
+                const ts = dayjs(this.selInfo.date).unix()
+                const url = `${selInfo.base_url}/detail/${business_id}-${category_id}.html?t=${ts}`
+                await page.goto(url, {
+                    waitUntil: "networkidle0"
+                })
+
                 await this.orderXianXia()
 
                 this.run = false
             } catch (e) {
-
+                console.log(e)
             }
             
         },
 
+        // 预定仙霞网球中心
         async orderXianXia () {
             try {
                 this.flag2 = false
                 console.log(`正在查找...`)
                 // 直接提交订单
                 const orderRes = await page.evaluate((info) => {
-                    // id写死
-                    const ids = info.ids
-                    // const ids = ['352061397', '352061398']
+                    // 动态获取id
+                    const ids= []
+                    for (let i = 0; i < info.tr.length; i++) {
+                        ids.push($(`.single[place_holder*="${info.tr[i]}"]`).attr('goods_id').split(',')[0])
+                        // 一个人只抢2场
+                        if (ids.length === 2) {
+                            break
+                        }
+                    }
                     return $.ajax({
                         type: 'post',
                         url: `http://www.quyundong.com/order/addOrder`,
@@ -249,9 +263,9 @@ export default {
                     console.log(`正在预定...`)
                     browser.close()
 
-                    if (this.retryTimer) {
-                        clearInterval(this.retryTimer)
-                        this.retryTimer = null
+                    if (this.retryJob) {
+                        this.retryJob.stop()
+                        this.retryJob = null
                     }
 
                     remote.dialog.showMessageBox({
@@ -262,29 +276,24 @@ export default {
                     })
                 } else {
                     console.log(`该场次暂不可预订...`)
-                    if (!this.retryTimer) {
-                        this.retryTimer = setInterval(async() => {
-                            if (this.flag2) {
-                                await this.orderXianXia()
-                            }
-                        }, 100)
-                        // this.retryJob = new cronJob(
-                        //     '*/1 * * * * *',
-                        //     async() => {
-                        //         if (this.flag2) {
-                        //             console.log('开始重试...')
-                        //             await this.orderXianXia()
-                        //         }
-                        //     },
-                        //     // oncomplete
-                        //     null,
-                        //     // startNow
-                        //     true
-                        // )
+                    if (!this.retryJob) {
+                        this.retryJob = new cronJob(
+                            '0-10 0 0 * * *',
+                            async() => {
+                                if (this.flag2) {
+                                    console.log('开始重试...')
+                                    await this.orderXianXia()
+                                }
+                            },
+                            // oncomplete
+                            null,
+                            // startNow
+                            true
+                        )
                     }
                 }
             } catch (e) {
-
+                console.log(e)
             }
         },
     }
