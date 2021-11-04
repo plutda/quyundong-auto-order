@@ -1,6 +1,6 @@
 # order
 
-> An electron-vue project
+> 使用electron-vue开发的趣运动自动买票程序
 
 #### Build Setup
 
